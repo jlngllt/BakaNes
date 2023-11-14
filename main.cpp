@@ -1,12 +1,104 @@
 #include <iostream>
 #include <cstdint>
 #include <cassert>
+#include <array>
+#include <vector>
+
+#include <stdio.h>
 
 using namespace std;
 
+#define ARRAY_LEN(x) (sizeof(x) / sizeof(*x))
 static void TODO() { assert(false);}
 
 namespace emulator {
+
+class Ines {
+    public:
+        enum rom_section {
+            SECTION_HEADER = 1 << 0,
+        };
+        Ines(std::string const &filename) : 
+            m_filename(filename),
+            m_file_handler(NULL) {}
+        bool Open();
+        bool Close();
+        void Print(rom_section sections);
+        bool Parse(uint8_t *buffer);
+    public:
+        union {
+            uint8_t buffer[16];
+            struct {
+                uint8_t NES[3];
+                uint8_t prg_rom_size;
+                uint8_t chr_rom_size;
+                uint8_t flag_6;
+                uint8_t flag_7;
+                uint8_t flag_8;
+                uint8_t flag_9;
+                uint8_t flag_10;
+            } fmt ;
+        } m_u_header;
+        std::array<uint8_t, 16> m_header;
+        std::array<uint8_t, 512> m_trainer;
+        std::vector<uint8_t> m_rom_data;
+        std::vector<uint8_t> m_inst_rom;
+        std::array<uint8_t, 16> m_prom_data;
+        std::array<uint8_t, 16> m_prom_counterout;
+        uint32_t m_rom_len;
+    private:
+        FILE *m_file_handler;
+        std::string const m_filename;
+
+};
+
+bool Ines::Open() {
+    FILE *fp = fopen(m_filename.c_str(), "rb");
+    if (!fp) return false;
+    m_file_handler = fp;
+    fseek(fp, 0, SEEK_END);
+    long len = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    printf("Open: %s (%ld)\n", m_filename.c_str(), len);
+    m_rom_len = len;
+    return true;
+}
+
+bool Ines::Parse(uint8_t *buffer) {
+    int n_read = fread(buffer, 1, m_rom_len, m_file_handler);
+    printf("Read %d bytes\n", n_read);
+    if (n_read != m_rom_len) return false;
+
+    for (int i = 0; i < ARRAY_LEN(m_u_header.buffer) && i < n_read; i++) {
+        m_u_header.buffer[i] = buffer[i];
+        printf("[%02x]", m_u_header.buffer[i]);
+    }
+    printf("\n");
+
+    // TODO: Other section
+    return true;
+}
+
+void Ines::Print(rom_section section) {
+    switch(section) {
+        case SECTION_HEADER: {
+            printf("INES         = %c%c%c\n", m_u_header.fmt.NES[0], m_u_header.fmt.NES[1], m_u_header.fmt.NES[2]);
+            printf("PRG ROM size = %d\n", m_u_header.fmt.prg_rom_size);
+            printf("CHR ROM size = %d\n", m_u_header.fmt.chr_rom_size);
+            printf("flag 6       = %d\n", m_u_header.fmt.flag_6);
+            printf("flag 7       = %d\n", m_u_header.fmt.flag_7);
+            printf("flag 8       = %d\n", m_u_header.fmt.flag_8);
+            printf("flag 9       = %d\n", m_u_header.fmt.flag_9);
+            printf("flag 10      = %d\n", m_u_header.fmt.flag_10);
+        } break;
+    }
+
+}
+
+bool Ines::Close() {
+    printf("Close file: %s\n", m_filename.c_str());
+    return fclose(m_file_handler) == 0;
+}
 
 class Register {
 public:
@@ -102,6 +194,12 @@ private:
 
 }
 
-int main() {
-    cout << "Hello World\n";
+int main(int argc, char **argv) {
+    emulator::Ines rom("rom/mario_bros.nes");
+    rom.Open();
+    uint8_t *buffer = (uint8_t *)malloc(sizeof(uint8_t) * rom.m_rom_len);
+    rom.Parse(buffer);
+    rom.Print(emulator::Ines::SECTION_HEADER);
+
+    return 0;
 }   
