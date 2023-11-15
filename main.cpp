@@ -29,10 +29,20 @@ class Ines {
         union {
             uint8_t buffer[16];
             struct {
-                uint8_t NES[3];
+                uint8_t NES[4];
                 uint8_t prg_rom_size;
                 uint8_t chr_rom_size;
-                uint8_t flag_6;
+                // uint8_t flag_6;
+                union {
+                    uint8_t data;
+                    struct {
+                        uint8_t mirroring: 1; // 0 horizontal (vertical arrangement); 1 vertical(horizontal arrangement)
+                        uint8_t cartdridge_contains_battery:1;
+                        uint8_t trainer_512_bytes: 1;
+                        uint8_t ignore_mirroring_control: 1;
+                        uint8_t lower_nybble_mapper_number: 4;
+                    } fmt;
+                } flag_6;
                 uint8_t flag_7;
                 uint8_t flag_8;
                 uint8_t flag_9;
@@ -41,10 +51,12 @@ class Ines {
         } m_u_header;
         std::array<uint8_t, 16> m_header;
         std::array<uint8_t, 512> m_trainer;
-        std::vector<uint8_t> m_rom_data;
-        std::vector<uint8_t> m_inst_rom;
-        std::array<uint8_t, 16> m_prom_data;
-        std::array<uint8_t, 16> m_prom_counterout;
+        std::vector<uint8_t> m_prg_rom_data;
+        std::vector<uint8_t> m_chr_rom_data;
+        std::vector<uint8_t> m_playchoice_inst_rom; // not used;
+        std::array<uint8_t, 16> m_playchoice_prom_data; // not used
+        std::array<uint8_t, 16> m_playchoice_prom_counterout; // not used
+        
         uint32_t m_rom_len;
     private:
         FILE *m_file_handler;
@@ -69,23 +81,42 @@ bool Ines::Parse(uint8_t *buffer) {
     printf("Read %d bytes\n", n_read);
     if (n_read != m_rom_len) return false;
 
-    for (int i = 0; i < ARRAY_LEN(m_u_header.buffer) && i < n_read; i++) {
-        m_u_header.buffer[i] = buffer[i];
-        printf("[%02x]", m_u_header.buffer[i]);
+    int idx = 0;
+    for (int j_header = 0; j_header < 16; j_header++, idx++) {
+        m_u_header.buffer[j_header] = buffer[idx];
+        printf("[%02x]", m_u_header.buffer[j_header]);
     }
-    printf("\n");
+    
+    if (m_u_header.fmt.flag_6.fmt.trainer_512_bytes == 1) {
+        for (int j_trainer = 0; j_trainer < 512; j_trainer++, idx++) {
+            m_trainer[j_trainer] = buffer[idx];
+        }
+    }
 
-    // TODO: Other section
+    for (int j_prg_rom = 0; j_prg_rom < m_u_header.fmt.prg_rom_size * 16384; j_prg_rom++, idx++) {
+        printf("%d/%d %d\n", j_prg_rom, m_u_header.fmt.prg_rom_size * 16384, buffer[idx]);
+        m_prg_rom_data.push_back(buffer[idx]);
+    }
+
+    for (int j_chr_rom = 0; j_chr_rom < m_u_header.fmt.chr_rom_size * 8192; j_chr_rom++, idx++) {
+        m_chr_rom_data.push_back(buffer[idx]);
+    }
+    
     return true;
 }
 
 void Ines::Print(rom_section section) {
     switch(section) {
         case SECTION_HEADER: {
-            printf("INES         = %c%c%c\n", m_u_header.fmt.NES[0], m_u_header.fmt.NES[1], m_u_header.fmt.NES[2]);
+            printf("INES         = %c%c%c[%02x]\n", m_u_header.fmt.NES[0], m_u_header.fmt.NES[1], m_u_header.fmt.NES[2], m_u_header.fmt.NES[3]);
             printf("PRG ROM size = %d\n", m_u_header.fmt.prg_rom_size);
             printf("CHR ROM size = %d\n", m_u_header.fmt.chr_rom_size);
-            printf("flag 6       = %d\n", m_u_header.fmt.flag_6);
+            printf("flag 6 = %d\n", m_u_header.fmt.flag_6.data);
+            printf("  lower nybble mapper number = %d\n", m_u_header.fmt.flag_6.fmt.lower_nybble_mapper_number);
+            printf("  ignore mirroring control = %d\n", m_u_header.fmt.flag_6.fmt.ignore_mirroring_control);
+            printf("  trainer 512 bytes = %d\n", m_u_header.fmt.flag_6.fmt.trainer_512_bytes);
+            printf("  cartdridge contains battery = %d\n", m_u_header.fmt.flag_6.fmt.cartdridge_contains_battery);
+            printf("  mirroring = %d\n", m_u_header.fmt.flag_6.fmt.mirroring);
             printf("flag 7       = %d\n", m_u_header.fmt.flag_7);
             printf("flag 8       = %d\n", m_u_header.fmt.flag_8);
             printf("flag 9       = %d\n", m_u_header.fmt.flag_9);
