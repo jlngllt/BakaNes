@@ -259,12 +259,47 @@ void CPU::loop() {
         idx++;
     }
 }
+}
 
+#include <SDL2/SDL.h>
+
+
+int sdl_test() {
+     if(SDL_Init(SDL_INIT_VIDEO) < 0)
+    {
+        std::cout << "Failed to initialize the SDL2 library\n";
+        return -1;
+    }
+
+    SDL_Window *window = SDL_CreateWindow("SDL2 Window",
+                                          SDL_WINDOWPOS_CENTERED,
+                                          SDL_WINDOWPOS_CENTERED,
+                                          680, 480,
+                                          0);
+
+    if(!window)
+    {
+        std::cout << "Failed to create window\n";
+        return -1;
+    }
+
+    SDL_Surface *window_surface = SDL_GetWindowSurface(window);
+
+    if(!window_surface)
+    {
+        std::cout << "Failed to get the surface from the window\n";
+        return -1;
+    }
+
+    SDL_UpdateWindowSurface(window);
+
+    SDL_Delay(5000);
 }
 
 
-
 int main(int argc, char **argv) {
+    sdl_test();
+
     emulator::Ines rom("rom/mario_bros.nes");
     rom.Open();
     uint8_t *buffer = (uint8_t *)malloc(sizeof(uint8_t) * rom.m_rom_len);
@@ -274,3 +309,5 @@ int main(int argc, char **argv) {
     cpu.loop();
     return 0;
 }   
+
+
